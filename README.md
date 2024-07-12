@@ -5,18 +5,19 @@ This is a docker image that contains an environment for cross-compiling Rust pro
 * x86_64-apple-darwin
 * aarch64-apple-darwin
 
-To build the image:
-
-    docker build . -t rustxc
-
 To use it:
 
-    docker run --mount type=bind,source="$(pwd)",target=/mnt rustxc cargo build \
-        --target powerpc64le-unknown-linux-gnu \
-        --target x86_64-unknown-linux-gnu \
-        --target aarch64-unknown-linux-gnu \
-        --target x86_64-apple-darwin \
-        --target aarch64-apple-darwin
+    docker run --mount type=bind,source="$(pwd)",target=/mnt ghcr.io/martint/rustxc:latest \
+        cargo build \
+          --target powerpc64le-unknown-linux-gnu \
+          --target x86_64-unknown-linux-gnu \
+          --target aarch64-unknown-linux-gnu \
+          --target x86_64-apple-darwin \
+          --target aarch64-apple-darwin
+
+To build the image locally:
+
+    docker build . -t rustxc
 
 
 # Resources
