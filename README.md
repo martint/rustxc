@@ -1,4 +1,4 @@
-This is a docker image that contains an environment for cross-compiling Rust projects to the following plaforms:
+This is a [docker image](https://github.com/martint/rustxc/pkgs/container/rustxc) that contains an environment for cross-compiling Rust projects to the following plaforms:
 * aarch64-unknown-linux-gnu
 * x86_64-unknown-linux-gnu
 * powerpc64le-unknown-linux-gnu
