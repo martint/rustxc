@@ -26,6 +26,7 @@ RUN <<END
   apt update
   apt install -yq \
       clang \
+      make \
       gcc-aarch64-linux-gnu \
       gcc-x86-64-linux-gnu \
       gcc-powerpc64le-linux-gnu
