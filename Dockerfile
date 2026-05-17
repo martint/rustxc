@@ -1,7 +1,7 @@
 # Build the Mac OS X toolchain
 FROM rust:latest AS osxcross
 
-ARG MACOS_X_SDK_VERSION=14.5
+ARG MACOS_X_SDK_VERSION=26.1
 RUN <<END
   apt update
   DEBIAN_FRONTEND=noninteractive apt install -yq \
