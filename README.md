@@ -20,13 +20,16 @@ To build the image locally:
     docker build . -t rustxc
 
 To rebuild and publish the image manually, open the repository's **Actions** tab,
-select **Docker (manual)**, and click **Run workflow**. The workflow must first be
+select **Docker (manual and monthly)**, and click **Run workflow**. The workflow must first be
 merged into the default branch. You can also trigger it with the GitHub CLI:
 
     gh workflow run docker-publish-manual.yml --ref master
 
-Each manual build pulls fresh base images to update the Rust toolchain, builds for
+Each build pulls fresh base images to update the Rust toolchain, builds for
 AMD64 and ARM64, and publishes to `ghcr.io/martint/rustxc:latest`.
+
+The same workflow also runs on the first day of every month so the image picks up
+new Rust releases without a manual run.
 
 
 # Resources

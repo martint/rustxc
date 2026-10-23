@@ -1,7 +1,10 @@
-name: Docker (manual)
+name: Docker (manual and monthly)
 
 on:
   workflow_dispatch:
+  # Monthly rebuild so the image picks up new Rust releases from rust:latest.
+  schedule:
+    - cron: '17 4 1 * *'
 
 env:
   REGISTRY: ghcr.io
