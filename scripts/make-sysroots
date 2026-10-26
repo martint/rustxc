@@ -1,0 +1,47 @@
+#!/bin/bash
+set -euo pipefail
+# Resolve the complete package closure against an EMPTY dpkg database, so host
+# packages never satisfy a target dependency. apt downloads, dpkg-deb extracts.
+for spec in aarch64:arm64 x86_64:amd64 powerpc64le:ppc64el; do
+    cpu=${spec%:*}; arch=${spec#*:}
+    root=/opt/sysroots/$cpu-unknown-linux-gnu
+    state=$(mktemp -d)
+    mkdir -p "$state/lists/partial" "$state/archives/partial" "$root"
+    touch "$state/status"
+    opts=(-o "APT::Architecture=$arch" -o "APT::Architectures=$arch"
+          -o "Dir::State=$state" -o "Dir::State::status=$state/status"
+          -o "Dir::State::lists=$state/lists" -o "Dir::Cache::archives=$state/archives"
+          -o APT::Sandbox::User=root)
+    apt-get "${opts[@]}" update
+    apt-get "${opts[@]}" --download-only --no-install-recommends -y install \
+        libc6-dev libstdc++-12-dev libasound2-dev libudev-dev libdbus-1-dev \
+        libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+        libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev \
+        libxinerama-dev libxfixes-dev libxrender-dev libxcb-shape0-dev \
+        libxcb-xfixes0-dev libxcb-render0-dev libxcb-randr0-dev \
+        libegl1-mesa-dev libgl1-mesa-dev libvulkan-dev
+    for deb in "$state"/archives/*.deb; do dpkg-deb -x "$deb" "$root"; done
+    # Absolute symlinks in Debian packages must resolve inside this sysroot.
+    python3 - "$root" <<'PY'
+import os, sys
+root = sys.argv[1]
+for parent, dirs, files in os.walk(root):
+    for name in dirs + files:
+        path = os.path.join(parent, name)
+        if os.path.islink(path) and os.readlink(path).startswith('/'):
+            target = root + os.readlink(path)
+            os.unlink(path)
+            os.symlink(os.path.relpath(target, parent), path)
+PY
+    # Architecture-independent protocol .pc files are required by x11.pc.
+    # Retain them even though the rest of /usr/share is not a build input.
+    if [[ -d $root/usr/share/pkgconfig ]]; then
+        mkdir -p "$root/usr/lib/pkgconfig"
+        cp -a "$root/usr/share/pkgconfig/." "$root/usr/lib/pkgconfig/"
+    fi
+    # Record exactly which target packages were selected.
+    for deb in "$state"/archives/*.deb; do
+        dpkg-deb -f "$deb" Package Version Architecture
+    done > "$root/packages.txt"
+    rm -rf "$state" "${root:?}/usr/share" "${root:?}/usr/bin" "${root:?}/usr/sbin"
+done

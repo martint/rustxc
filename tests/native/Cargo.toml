@@ -1,0 +1,18 @@
+[package]
+name = "rustxc-native-smoke"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+sha2 = "=0.10.9"
+zstd = "=0.13.3"
+# Pin the bundled C dependency for reproducible native smoke builds.
+zstd-sys = { version = "=2.0.16", default-features = false }
+
+[target.'cfg(all(target_arch = "aarch64", not(target_os = "windows")))'.dependencies]
+sha2 = { version = "=0.10.9", features = ["asm"] }
+
+[build-dependencies]
+cc = "=1.2.41"
+pkg-config = "=0.3.32"

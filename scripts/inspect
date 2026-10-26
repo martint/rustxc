@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+for binary in "$@"; do
+    file "$binary"
+    case $(file -b "$binary") in
+        *ELF*)
+            llvm-readelf --file-header --dynamic --version-info "$binary"
+            # The sysroot baseline is glibc 2.36. Fail if anything newer leaks in.
+            versions=$(llvm-readelf --version-info "$binary" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu)
+            if [[ -n $versions ]] && [[ $(printf '%s\n' "$versions" GLIBC_2.36 | sort -V | tail -1) != GLIBC_2.36 ]]; then
+                echo "Binary requires newer than glibc 2.36" >&2; exit 1
+            fi ;;
+        *Mach-O*) llvm-objdump --macho --private-headers --dylibs-used "$binary" ;;
+        *PE32*) llvm-readobj --file-headers --coff-imports "$binary" ;;
+        *) echo "Unrecognized executable" >&2; exit 1 ;;
+    esac
+done
