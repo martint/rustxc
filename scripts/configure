@@ -1,0 +1,60 @@
+#!/bin/bash
+set -euo pipefail
+mkdir -p /opt/rustxc/bin /opt/rustxc/cmake /usr/local/cargo
+for command in build-target inspect; do ln -sf /opt/rustxc/$command /opt/rustxc/bin/$command; done
+config=/usr/local/cargo/config.toml
+: > "$config"
+: > /opt/rustxc/environment
+for target in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu powerpc64le-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc aarch64-pc-windows-msvc; do
+    for tool in cc cxx ar ranlib as pkg-config; do
+        ln -sf /opt/rustxc/tool "/opt/rustxc/bin/$target-$tool"
+    done
+    upper=${target^^}; upper=${upper//-/_}
+    key=${target//-/_}
+    cat >> "$config" <<CFG
+[target.$target]
+linker = "/opt/rustxc/bin/$target-cc"
+
+CFG
+    if [[ $target != *-windows-msvc ]]; then
+        root=/opt/sysroots/$target; system=Linux
+        if [[ $target == *-apple-darwin ]]; then root=/opt/sdk/macos; system=Darwin; fi
+        cat > /opt/rustxc/cmake/$target.cmake <<CMAKE
+set(CMAKE_SYSTEM_NAME $system)
+set(CMAKE_SYSTEM_PROCESSOR ${target%%-*})
+set(CMAKE_C_COMPILER /opt/rustxc/bin/$target-cc)
+set(CMAKE_CXX_COMPILER /opt/rustxc/bin/$target-cxx)
+set(CMAKE_AR /opt/rustxc/bin/$target-ar)
+set(CMAKE_RANLIB /opt/rustxc/bin/$target-ranlib)
+set(CMAKE_SYSROOT $root)
+set(CMAKE_FIND_ROOT_PATH $root)
+set(PKG_CONFIG_EXECUTABLE /opt/rustxc/bin/$target-pkg-config CACHE FILEPATH "")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+CMAKE
+        if [[ $system == Darwin ]]; then
+            arch=${target%%-*}; [[ $arch != aarch64 ]] || arch=arm64
+            cat >> /opt/rustxc/cmake/$target.cmake <<CMAKE
+set(CMAKE_OSX_ARCHITECTURES $arch CACHE STRING "")
+set(CMAKE_OSX_SYSROOT $root)
+set(CMAKE_OSX_DEPLOYMENT_TARGET 11.0 CACHE STRING "")
+CMAKE
+        fi
+        echo "export CMAKE_TOOLCHAIN_FILE_$key=/opt/rustxc/cmake/$target.cmake" >> /opt/rustxc/environment
+    fi
+    # Target-qualified cc-rs/pkg-config variables leave build-script HOST tools
+    # untouched, including when the target and host architectures coincide.
+    cat >> /opt/rustxc/environment <<ENV
+export CC_$key=/opt/rustxc/bin/$target-cc
+export CXX_$key=/opt/rustxc/bin/$target-cxx
+export AR_$key=/opt/rustxc/bin/$target-ar
+export RANLIB_$key=/opt/rustxc/bin/$target-ranlib
+export AS_$key=/opt/rustxc/bin/$target-as
+export PKG_CONFIG_$key=/opt/rustxc/bin/$target-pkg-config
+export CARGO_TARGET_${upper}_LINKER=/opt/rustxc/bin/$target-cc
+ENV
+done
+# MSVC must be invoked through cargo-xwin, which sets linker, SDK/CRT paths,
+# target CC/CXX/AR and CMake variables. Never pass MSVC link arguments to cc.

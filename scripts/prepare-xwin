@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+# Pin Microsoft's package catalogue, not only its moving component selectors.
+# cargo-xwin 0.23.1/xwin 0.10 reads these cached names before using the network.
+if [[ ${XWIN_VERSION:-17} != 17 ]]; then
+    echo "The pinned SDK catalogue is for Visual Studio 17; update the manifest pin first" >&2
+    exit 2
+fi
+cache=${XWIN_CACHE_DIR:-/opt/xwin}/xwin/dl
+name=pkg_manifest_5bd3b0b2ae509af2e9559b852f78545df0bf2c081dd850caed76f1dc134c511e.vsman
+checksum=87791000b1d6357e174f039ce9c2f03d150d4e90b45e8e52468d797dac62022c
+identity="manifest=$checksum sdk=${XWIN_SDK_VERSION:?} crt=${XWIN_CRT_VERSION:?} arch=${XWIN_ARCH:?} variant=${XWIN_VARIANT:-desktop}"
+stamp=${XWIN_CACHE_DIR:-/opt/xwin}/rustxc-inputs
+if [[ -f ${cache%/dl}/DONE ]]; then
+    if [[ -f $stamp ]] && [[ $(cat "$stamp") == "$identity" ]]; then exit 0; fi
+    echo "SDK cache has different or unrecorded inputs; use a fresh XWIN_CACHE_DIR/volume" >&2
+    exit 2
+fi
+mkdir -p "$cache"
+printf '%s\n' "$identity" > "$stamp"
+cp /opt/rustxc/windows-channel.json "$cache/manifest_17.json"
+if ! [[ -f $cache/$name ]]; then
+    curl -fL --retry 5 https://download.visualstudio.microsoft.com/download/pr/4bc08c27-bd31-470c-9a30-3b62707fbf0f/5bd3b0b2ae509af2e9559b852f78545df0bf2c081dd850caed76f1dc134c511e/VisualStudio.vsman -o "$cache/$name"
+fi
+echo "$checksum  $cache/$name" | sha256sum -c -

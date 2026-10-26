@@ -1,0 +1,22 @@
+#!/bin/bash
+set -euo pipefail
+if (($# < 1)); then echo "usage: build-target TARGET [cargo build options...]" >&2; exit 2; fi
+target=$1; shift
+case "$target" in
+    aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu|powerpc64le-unknown-linux-gnu|aarch64-apple-darwin|x86_64-apple-darwin|x86_64-pc-windows-msvc|aarch64-pc-windows-msvc) ;;
+    *) echo "Unsupported target: $target" >&2; exit 2 ;;
+esac
+# rustup honors rust-toolchain.toml and RUSTUP_TOOLCHAIN. Install std for the
+# ACTIVE version rather than assuming that the image's default is selected.
+rustup target add "$target"
+if [[ $target == *-windows-msvc ]]; then
+    unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH LIBRARY_PATH SDKROOT INCLUDE LIB
+    mkdir -p "${XWIN_CACHE_DIR:-/opt/xwin}"
+    exec 9>"${XWIN_CACHE_DIR:-/opt/xwin}/rustxc.lock"
+    flock 9
+    /opt/rustxc/prepare-xwin
+    exec cargo xwin build --target "$target" "$@"
+else
+    if [[ $target == *-apple-darwin ]]; then export SDKROOT=/opt/sdk/macos; fi
+    exec cargo build --target "$target" "$@"
+fi

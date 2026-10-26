@@ -1,0 +1,58 @@
+#!/bin/bash
+set -euo pipefail
+name=${0##*/}
+case "$name" in
+    *-pkg-config) tool=pkg-config; target=${name%-pkg-config} ;;
+    *) tool=${name##*-}; target=${name%-"$tool"} ;;
+esac
+# Environment include/library paths can otherwise bypass a compiler's sysroot.
+unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH LIBRARY_PATH SDKROOT
+if [[ $target == *-unknown-linux-gnu ]]; then
+    cpu=${target%%-*}
+    triple=$cpu-linux-gnu
+    [[ $cpu != powerpc64le ]] || triple=powerpc64le-linux-gnu
+    root=/opt/sysroots/$target
+    case $tool in
+        pkg-config)
+            export PKG_CONFIG_SYSROOT_DIR=$root
+            export PKG_CONFIG_LIBDIR=$root/usr/lib/$triple/pkgconfig:$root/usr/lib/pkgconfig:$root/usr/share/pkgconfig
+            export PKG_CONFIG_PATH='' PKG_CONFIG_DIR='' PKG_CONFIG_ALLOW_CROSS=1
+            exec /usr/bin/pkg-config "$@" ;;
+        cc|cxx)
+            compiler=clang; [[ $tool != cxx ]] || compiler=clang++
+            exec "$compiler" --target="$triple" --sysroot="$root" \
+                --gcc-install-dir="$root/usr/lib/gcc/$triple/12" \
+                -fuse-ld=lld "$@" ;;
+        *) exec "$triple-$tool" "$@" ;;
+    esac
+elif [[ $target == *-apple-darwin ]]; then
+    case $tool in
+        pkg-config)
+            # No third-party Darwin libraries are bundled. Never fall back to
+            # host .pc files. Projects can populate this target-only directory.
+            export PKG_CONFIG_SYSROOT_DIR=/opt/sdk/macos
+            export PKG_CONFIG_LIBDIR=/opt/sysroots/$target/usr/lib/pkgconfig
+            export PKG_CONFIG_PATH='' PKG_CONFIG_DIR='' PKG_CONFIG_ALLOW_CROSS=1
+            exec /usr/bin/pkg-config "$@" ;;
+        ar|ranlib) exec "llvm-$tool" "$@" ;;
+        cc) compiler=clang ;;
+        as) compiler=clang; set -- -c "$@" ;;
+        cxx) compiler=clang++ ;;
+    esac
+    exec "$compiler" --target="$target" -isysroot /opt/sdk/macos \
+        -mmacosx-version-min="${MACOSX_DEPLOYMENT_TARGET:-11.0}" -fuse-ld=lld "$@"
+else
+    case $tool in
+        as) exec clang --target="$target" -c "$@" ;;
+        ar) exec llvm-lib "$@" ;;
+        ranlib) exec llvm-ranlib "$@" ;;
+    esac
+    if [[ $tool == pkg-config ]]; then
+        export PKG_CONFIG_SYSROOT_DIR=/opt/xwin
+        export PKG_CONFIG_LIBDIR=/opt/sysroots/$target/usr/lib/pkgconfig
+        export PKG_CONFIG_PATH='' PKG_CONFIG_DIR='' PKG_CONFIG_ALLOW_CROSS=1
+        exec /usr/bin/pkg-config "$@"
+    fi
+    echo 'Use cargo xwin build for MSVC (Microsoft SDK/CRT required)' >&2
+    exit 1
+fi
